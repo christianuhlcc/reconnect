@@ -1,5 +1,17 @@
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
+export type AvatarMeta = {
+  name: string;
+  sprite: string;
+  color: string;       // shirt colour
+  skinTone: string;    // hex, e.g. '#FFCC88'
+  hairStyle: string;   // 'short'|'long'|'curly'|'bun'|'mohawk'|'bald'
+  hairColor: string;   // hex
+  beard: string;       // 'none'|'stubble'|'full'
+};
+
+export type EmoteType = 'joy' | 'anger' | 'sadness' | 'sleepy' | 'bored' | 'frustrated';
+
 export type PosMsg = {
   t: 'pos';
   x: number;
@@ -16,13 +28,12 @@ export type ChatMsg = {
   ts: number;
 };
 
-export type AvatarMeta = {
-  name: string;
-  sprite: string;
-  color: string;
+export type EmoteMsg = {
+  t: 'emote';
+  emote: EmoteType;
 };
 
-export type WireMsg = PosMsg | ChatMsg;
+export type WireMsg = PosMsg | ChatMsg | EmoteMsg;
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();

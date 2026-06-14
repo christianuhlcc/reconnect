@@ -11,7 +11,6 @@ import type { AvatarMeta, ChatMsg } from '@/lib/realtime';
 export default function GameCanvas({ room: roomSlug, meta }: { room: string; meta: AvatarMeta }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const lkRoomRef = useRef<Room | null>(null);
-  const stopGateMicRef = useRef<(() => void) | null>(null);
   const [muted, setMuted] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
@@ -40,16 +39,16 @@ export default function GameCanvas({ room: roomSlug, meta }: { room: string; met
         { default: Phaser },
         { OfficeScene },
         { getOrCreateIdentity, connectToRoom },
-        { addPeer, removePeer },
+        { addPeer, removePeer, getAudioContext },
         { RoomEvent, Track, LocalAudioTrack },
-        { createGatedMicStream },
+        { createNoiseFilter },
       ] = await Promise.all([
         import('phaser'),
         import('@/game/scenes/OfficeScene'),
         import('@/lib/livekit'),
         import('@/lib/audio'),
         import('livekit-client'),
-        import('@/lib/noiseGate'),
+        import('@/lib/noiseFilter'),
       ]);
 
       if (!mounted || !containerRef.current) return;
@@ -173,18 +172,42 @@ export default function GameCanvas({ room: roomSlug, meta }: { room: string; met
       game.events.once('ready', () => {
         if (!mounted) return;
         game!.scene.add('OfficeScene', OfficeScene, true, { room: roomSlug, lkRoom, meta });
-        // Publish a noise-gated mic track instead of the raw mic.
-        // createGatedMicStream routes getUserMedia → AudioWorklet noise gate →
-        // MediaStreamDestination so typing/background noise is suppressed.
-        createGatedMicStream()
-          .then(({ stream, stop }) => {
-            if (!mounted) { stop(); return; }
-            stopGateMicRef.current = stop;
-            const [mediaTrack] = stream.getAudioTracks();
-            const audioTrack = new LocalAudioTrack(mediaTrack, undefined, true);
-            return lkRoom.localParticipant.publishTrack(audioTrack, {
-              source: Track.Source.Microphone,
-            });
+        // Enable the mic, then attach the ML noise-suppression processor
+        // (see lib/noiseFilter.ts — Krisp, swappable for OSS). setProcessor
+        // requires an AudioContext on the track, so we set our shared one
+        // explicitly. This is the only setMicrophoneEnabled(true) call;
+        // mute/unmute go through track.mute() to avoid re-negotiating the PC.
+        createNoiseFilter()
+          .then(async ({ processor, backend }) => {
+            if (!mounted) return;
+            const pub = await lkRoom.localParticipant.setMicrophoneEnabled(true);
+            if (!mounted) return;
+            const track = pub?.track;
+            if (backend === 'unsupported' || !processor) {
+              console.warn('Noise filter unsupported in this browser — mic published without suppression');
+              return;
+            }
+            if (!(track instanceof LocalAudioTrack)) return;
+            try {
+              track.setAudioContext(getAudioContext());
+              await track.setProcessor(processor);
+            } catch (e) {
+              console.warn('Noise filter could not be enabled, continuing without it:', e);
+              return;
+            }
+            // Krisp can be silently disabled by the server on a plan that
+            // doesn't include enhanced noise cancellation. Surface that so we
+            // know whether to swap lib/noiseFilter.ts for the OSS backend.
+            if (backend === 'krisp') {
+              setTimeout(() => {
+                if (mounted && track.enhancedNoiseCancellation === false) {
+                  console.warn(
+                    'Krisp noise filter did not engage — likely not enabled on this LiveKit Cloud plan. ' +
+                      'Swap the backend in lib/noiseFilter.ts for the OSS filter.',
+                  );
+                }
+              }, 3000);
+            }
           })
           .catch((e) => console.warn('Mic unavailable:', e));
       });
@@ -195,8 +218,6 @@ export default function GameCanvas({ room: roomSlug, meta }: { room: string; met
       document.body.style.overflow = '';
       window.removeEventListener('click', unlockAudio);
       window.removeEventListener('keydown', unlockAudio);
-      stopGateMicRef.current?.();
-      stopGateMicRef.current = null;
       lkRoomRef.current?.disconnect();
       lkRoomRef.current = null;
       game?.destroy(true);

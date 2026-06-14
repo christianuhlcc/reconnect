@@ -17,6 +17,13 @@ export function resumeContext() {
   getCtx().resume().catch(() => {});
 }
 
+// Shared with the mic noise filter (lib/noiseFilter.ts): LiveKit's setProcessor
+// requires an AudioContext on the LocalAudioTrack, and reusing this one keeps
+// mic processing and remote playout on a single context.
+export function getAudioContext(): AudioContext {
+  return getCtx();
+}
+
 interface PeerAudio {
   source: MediaStreamAudioSourceNode;
   gain: GainNode;

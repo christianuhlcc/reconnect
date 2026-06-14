@@ -11,6 +11,7 @@ import type { AvatarMeta, ChatMsg } from '@/lib/realtime';
 export default function GameCanvas({ room: roomSlug, meta }: { room: string; meta: AvatarMeta }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const lkRoomRef = useRef<Room | null>(null);
+  const stopGateMicRef = useRef<(() => void) | null>(null);
   const [muted, setMuted] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
@@ -40,13 +41,15 @@ export default function GameCanvas({ room: roomSlug, meta }: { room: string; met
         { OfficeScene },
         { getOrCreateIdentity, connectToRoom },
         { addPeer, removePeer },
-        { RoomEvent, Track },
+        { RoomEvent, Track, LocalAudioTrack },
+        { createGatedMicStream },
       ] = await Promise.all([
         import('phaser'),
         import('@/game/scenes/OfficeScene'),
         import('@/lib/livekit'),
         import('@/lib/audio'),
         import('livekit-client'),
+        import('@/lib/noiseGate'),
       ]);
 
       if (!mounted || !containerRef.current) return;
@@ -170,10 +173,20 @@ export default function GameCanvas({ room: roomSlug, meta }: { room: string; met
       game.events.once('ready', () => {
         if (!mounted) return;
         game!.scene.add('OfficeScene', OfficeScene, true, { room: roomSlug, lkRoom, meta });
-        // Fire-and-forget after scene is running so it doesn't race with scene init
-        lkRoom.localParticipant.setMicrophoneEnabled(true).catch((e) => {
-          console.warn('Mic unavailable:', e);
-        });
+        // Publish a noise-gated mic track instead of the raw mic.
+        // createGatedMicStream routes getUserMedia → AudioWorklet noise gate →
+        // MediaStreamDestination so typing/background noise is suppressed.
+        createGatedMicStream()
+          .then(({ stream, stop }) => {
+            if (!mounted) { stop(); return; }
+            stopGateMicRef.current = stop;
+            const [mediaTrack] = stream.getAudioTracks();
+            const audioTrack = new LocalAudioTrack(mediaTrack, undefined, true);
+            return lkRoom.localParticipant.publishTrack(audioTrack, {
+              source: Track.Source.Microphone,
+            });
+          })
+          .catch((e) => console.warn('Mic unavailable:', e));
       });
     })();
 
@@ -182,6 +195,8 @@ export default function GameCanvas({ room: roomSlug, meta }: { room: string; met
       document.body.style.overflow = '';
       window.removeEventListener('click', unlockAudio);
       window.removeEventListener('keydown', unlockAudio);
+      stopGateMicRef.current?.();
+      stopGateMicRef.current = null;
       lkRoomRef.current?.disconnect();
       lkRoomRef.current = null;
       game?.destroy(true);

@@ -84,6 +84,15 @@ See `virtual-office-implementation-plan.md` for full spec.
 - Nameplates + speaking ring: already done in Phase 4/5
 - Perf check: deferred to real team session
 
+### Office redesign — bigger & cuter ✅
+- **Map +50% area**: grid 25×20 → **30×25** (800×640 → 960×800px); `MAP_COLS/ROWS` + spawn (464, 400, central walkway crossroads) updated in `OfficeScene.ts`
+- **Zoned layout** (WorkAdventure-style, linked by flagstone walkways): work pods + coffee/kitchen nook up top; meeting room (whiteboard + round tables on rug) + plant garden bottom-left; lounge (couches on rug) + Monkey-Island "captain's corner" (treasure chest, ship-in-a-bottle, parrot perch, tiki palm, hanging sign) bottom-right; sky windows along the top wall
+- **Tileset refactor**: `buildTilesetTexture()` now an ordered array of pure draw-fns (`drawFloor`…`drawSign`) at module scope; canvas width self-sizes from the count; GID = index+1. Tiles grew 8 → **19**
+- **Cuter palette**: warm honey plank floor, sage-teal plaster walls (was navy), rounded pastel-coral couch; helpers `rr`/`circle`/`ellipse`/`tri` for rounded shapes
+- **Walkability**: new `WALKABLE_GIDS = [1, 9, 10]` (floor, rug, walkway); `setCollisionByExclusion([-1, ...WALKABLE_GIDS])`. All other GIDs solid
+- **Single-layer gotcha**: every prop tile paints its own full background (planks for floor props, rug for couch/table) — there is no ground layer beneath, so transparent tiles would show black
+- Verified: `next build` clean; map flood-fill reachable (537/537 walkable tiles, no sealed pockets); all 19 tiles + full map rendered via headless Chrome
+
 ### Phase 8 — Production hardening
 - Self-host LiveKit on AWS Frankfurt (eu-central-1) for GDPR + flat cost
 - Separate dev (Cloud) / prod (self-hosted) env config

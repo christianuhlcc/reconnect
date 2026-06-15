@@ -10,34 +10,47 @@ const TILE = 32;
 const PLAYER_W = 32;
 const PLAYER_H = 48;
 const SPEED = 160;
-const SPAWN_X = 384;
-const SPAWN_Y = 224;
-const MAP_COLS = 25;
-const MAP_ROWS = 20;
+const SPAWN_X = 464;
+const SPAWN_Y = 400;
+const MAP_COLS = 30;
+const MAP_ROWS = 25;
 const POS_INTERVAL = 100;
 
-// Tile GIDs: 1=floor  2=wall  3=desk  4=desk+monitor  5=bookcase  6=couch  7=plant  8=cooler
+// Tile GIDs:
+//   1=floor  2=wall  3=desk  4=desk+monitor  5=bookcase  6=couch  7=plant  8=cooler
+//   9=rug  10=walkway  11=round table  12=coffee machine  13=whiteboard  14=window
+//   15=treasure chest  16=ship-in-a-bottle  17=tiki palm  18=parrot perch  19=hanging sign
+// Walkable tiles — everything else collides (see create()).
+const WALKABLE_GIDS = [1, 9, 10];
+
+// 30×25 zoned office: work pods + coffee nook up top, meeting room + lounge +
+// plant garden + captain's corner below, all linked by a walkway crossroads.
 const OFFICE_MAP: number[][] = [
-  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
-  [2,5,5,5,5,5,5,1,1,1,1,1,1,1,1,1,1,1,5,5,5,5,5,7,2],
-  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
-  [2,4,3,1,4,3,1,1,1,1,1,1,1,1,1,1,1,4,3,1,4,3,1,1,2],
-  [2,3,3,1,3,3,1,1,1,1,1,1,1,1,1,1,1,3,3,1,3,3,1,7,2],
-  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
-  [2,7,1,4,3,1,1,1,1,1,1,1,1,1,1,1,1,4,3,1,1,1,7,1,2],
-  [2,1,1,3,3,1,1,1,1,1,1,1,1,1,1,1,1,3,3,1,1,1,1,1,2],
-  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
-  [2,1,1,1,1,1,1,1,1,1,8,1,1,1,8,1,1,1,1,1,1,1,1,1,2],
-  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
-  [2,1,1,1,1,7,1,6,6,6,1,1,1,1,1,6,6,6,1,7,1,1,1,1,2],
-  [2,1,1,1,1,1,1,6,6,6,1,1,1,1,1,6,6,6,1,1,1,1,1,1,2],
-  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
-  [2,4,3,1,4,3,1,1,1,1,1,1,1,1,1,1,1,4,3,1,4,3,1,1,2],
-  [2,3,3,1,3,3,1,1,1,1,1,1,1,1,1,1,1,3,3,1,3,3,1,7,2],
-  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
-  [2,7,1,4,3,1,1,1,1,1,1,1,1,1,1,1,1,4,3,1,1,1,7,1,2],
-  [2,1,1,3,3,1,1,1,1,1,1,1,1,1,1,1,1,3,3,1,1,1,1,1,2],
-  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+  [2,14,14,2,2,2,2,14,14,2,2,2,2,2,2,2,2,2,2,14,14,2,2,2,2,14,14,2,2,2],
+  [2,5,5,1,1,5,5,1,1,5,5,1,1,1,10,10,1,12,12,12,1,1,8,1,1,5,5,5,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,10,10,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,4,3,1,1,4,3,1,1,4,3,1,1,10,10,1,9,9,9,9,1,1,1,9,9,9,9,1,2],
+  [2,1,3,3,1,1,3,3,1,1,3,3,1,1,10,10,1,9,11,11,9,1,7,1,9,11,11,9,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,10,10,1,9,9,9,9,1,1,1,9,9,9,9,1,2],
+  [2,7,1,1,1,1,1,1,1,1,1,1,1,7,10,10,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,4,3,1,1,4,3,1,1,4,3,1,1,10,10,1,5,5,1,1,1,1,1,1,1,12,12,1,2],
+  [2,1,3,3,1,1,3,3,1,1,3,3,1,1,10,10,1,1,1,1,1,1,11,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,10,10,1,1,1,1,1,9,9,9,1,1,1,1,1,2],
+  [2,7,1,1,1,1,1,1,1,1,1,1,1,7,10,10,7,1,1,1,1,9,11,9,1,1,1,1,7,2],
+  [2,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,2],
+  [2,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,10,2],
+  [2,1,1,13,13,13,1,1,1,1,1,1,1,1,10,10,1,5,5,1,1,1,1,1,1,1,7,1,1,2],
+  [2,9,9,9,9,9,9,9,9,9,9,9,9,1,10,10,1,9,9,9,9,9,9,9,9,9,9,9,1,2],
+  [2,9,9,11,11,11,9,9,11,11,11,9,9,1,10,10,1,9,6,6,6,9,9,6,6,6,9,9,1,2],
+  [2,9,9,9,9,9,9,9,9,9,9,9,9,1,10,10,1,9,6,6,6,9,9,6,6,6,9,9,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,10,10,1,9,9,9,9,9,9,9,9,9,9,9,1,2],
+  [2,7,1,7,1,17,1,1,17,1,1,7,1,7,10,10,19,1,1,1,1,1,1,1,1,1,1,1,17,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,10,10,1,1,15,1,1,16,1,1,18,1,1,1,1,2],
+  [2,7,17,1,7,1,1,7,1,1,17,1,7,1,10,10,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,10,10,17,1,1,6,6,1,1,1,1,5,5,1,17,2],
+  [2,7,1,1,17,1,7,1,17,1,1,7,1,7,10,10,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,1,1,1,1,1,1,1,1,1,1,1,1,1,10,10,1,1,1,1,1,1,1,1,1,1,1,1,1,2],
+  [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
 ];
 
 const IDLE_FRAME: Record<Direction, number> = {
@@ -113,7 +126,7 @@ export class OfficeScene extends Phaser.Scene {
     const map = this.make.tilemap({ data: OFFICE_MAP, tileWidth: TILE, tileHeight: TILE });
     const tileset = map.addTilesetImage('office-tiles', 'tiles', TILE, TILE, 0, 0, 1)!;
     const layer = map.createLayer(0, tileset, 0, 0)!;
-    layer.setCollisionByExclusion([-1, 1]);
+    layer.setCollisionByExclusion([-1, ...WALKABLE_GIDS]);
 
     this.player = this.physics.add.sprite(SPAWN_X, SPAWN_Y, 'player_local', 0);
     this.player.setDepth(1);
@@ -536,107 +549,325 @@ export class OfficeScene extends Phaser.Scene {
     });
   }
 
-  // ── Tileset texture (unchanged) ─────────────────────────────────────────────
+  // ── Tileset texture ─────────────────────────────────────────────────────────
+  // Each entry draws one 32×32 tile at horizontal offset `ox`. Array order maps
+  // directly to GID (index + 1), and the canvas width is derived from the count,
+  // so adding a tile is a one-line append — no magic offsets to keep in sync.
 
   private buildTilesetTexture() {
     const T = TILE;
-    const tex = this.textures.createCanvas('tiles', T * 8, T)!;
+
+    // Drawn first so the helpers below can close over `ctx`.
+    const drawers: Array<(ctx: CanvasRenderingContext2D, ox: number) => void> = [
+      drawFloor,        // 1  floor
+      drawWall,         // 2  wall
+      drawDeskPapers,   // 3  desk
+      drawDeskMonitor,  // 4  desk + monitor
+      drawBookcase,     // 5  bookcase
+      drawCouch,        // 6  couch
+      drawPlant,        // 7  plant
+      drawCooler,       // 8  water cooler
+      drawRug,          // 9  area rug
+      drawWalkway,      // 10 walkway
+      drawRoundTable,   // 11 round meeting table
+      drawCoffee,       // 12 coffee machine
+      drawWhiteboard,   // 13 whiteboard
+      drawWindow,       // 14 window
+      drawChest,        // 15 treasure chest
+      drawShip,         // 16 ship-in-a-bottle
+      drawTiki,         // 17 tiki palm
+      drawParrot,       // 18 parrot perch
+      drawSign,         // 19 hanging sign
+    ];
+
+    const tex = this.textures.createCanvas('tiles', T * drawers.length, T)!;
     const ctx = tex.getContext()!;
-
-    const f = (x: number, y: number, w: number, h: number, color: string) => {
-      ctx.fillStyle = color; ctx.fillRect(x, y, w, h);
-    };
-
-    const planks = (ox: number) => {
-      const pc = ['#C49A5A','#BA8F52','#C8A060','#BC9255'];
-      for (let p = 0; p < 4; p++) {
-        f(ox, p*8, T, 7, pc[p]);
-        f(ox+3+p*4, p*8, 1, 7, 'rgba(255,215,140,0.18)');
-        f(ox+18+p*2, p*8, 1, 7, 'rgba(255,215,140,0.12)');
-        f(ox, p*8+7, T, 1, '#7A5228');
-      }
-    };
-
-    planks(0);
-
-    const w1 = T;
-    f(w1,0,T,T,'#22213F'); f(w1,0,T,5,'#48467A'); f(w1,0,3,T,'#35336A');
-    for (let r=0;r<4;r++){
-      const y=6+r*7;
-      f(w1+3,y,T-3,1,'#504E82');
-      f(r%2===0?w1+18:w1+10, y-6, 1, 6, '#403E72');
-    }
-    f(w1+T-2,0,2,T,'rgba(0,0,0,0.30)'); f(w1,T-2,T,2,'rgba(0,0,0,0.30)');
-
-    const d2 = T*2;
-    f(d2,0,T,T,'#9A7044'); f(d2,0,T,4,'#5C3A20'); f(d2,4,T,4,'#B08050');
-    f(d2+3,10,11,14,'#FFFFF0'); f(d2+4,12,8,1,'#C8C8B0');
-    f(d2+4,14,6,1,'#C8C8B0'); f(d2+4,16,9,1,'#C8C8B0'); f(d2+4,18,7,1,'#C8C8B0');
-    f(d2+16,16,12,9,'#4A4A4A'); f(d2+17,17,10,7,'#3A3A3A');
-    for(let kr=0;kr<3;kr++) f(d2+18,18+kr*2,8,1,'#555');
-    f(d2+4,23,7,6,'#FFFFFF'); f(d2+5,24,5,4,'#5C1414');
-    f(d2+11,25,3,3,'#FFFFFF'); f(d2+3,23,1,6,'rgba(0,0,0,0.15)');
-    f(d2+6,21,1,2,'rgba(200,200,200,0.5)'); f(d2+8,20,1,3,'rgba(200,200,200,0.4)');
-
-    const d3 = T*3;
-    f(d3,0,T,T,'#9A7044'); f(d3,0,T,4,'#5C3A20'); f(d3,4,T,4,'#B08050');
-    f(d3+5,4,22,16,'#181828');
-    f(d3+6,5,20,14,'#1E2A6E');
-    const lines: [number,string][] = [[7,'#7EC8E3'],[9,'#88D498'],[11,'#F0A500'],[13,'#E86060'],[15,'#A29BFE'],[17,'#7EC8E3']];
-    lines.forEach(([ly,c],i) => f(d3+7,ly,5+(i%3)*4,1,c));
-    f(d3+6,5,7,4,'rgba(255,255,255,0.07)');
-    f(d3+14,20,4,5,'#2A2A2A'); f(d3+11,23,10,2,'#333');
-    f(d3+6,26,20,5,'#4A4A4A'); f(d3+7,27,18,3,'#3A3A3A');
-    for(let kr=0;kr<2;kr++) f(d3+8,27+kr,16,1,'#555');
-
-    const d4 = T*4;
-    f(d4,0,T,T,'#3D2B1A'); f(d4,0,T,2,'#7A5A30');
-    f(d4,0,2,T,'#5C3D24'); f(d4+T-2,0,2,T,'#1E140A');
-    [10,21].forEach(sy => f(d4,sy,T,2,'#7A5A30'));
-    const booksRow = (row: [number,number,string][], y: number) =>
-      row.forEach(([x,w,c]) => {
-        f(d4+x,y,w-1,8,c); f(d4+x,y,1,8,'rgba(255,255,255,0.2)');
-      });
-    booksRow([[2,3,'#C0392B'],[5,4,'#E67E22'],[9,3,'#27AE60'],[12,5,'#2980B9'],
-              [17,3,'#8E44AD'],[20,4,'#E74C3C'],[24,4,'#F1C40F'],[28,2,'#16A085']], 2);
-    booksRow([[2,4,'#9B59B6'],[6,3,'#1ABC9C'],[9,5,'#E74C3C'],[14,3,'#F39C12'],
-              [17,4,'#2ECC71'],[21,3,'#3498DB'],[24,5,'#E67E22'],[29,1,'#BDC3C7']], 12);
-    booksRow([[2,5,'#C0392B'],[7,3,'#27AE60'],[10,4,'#8E44AD'],[14,3,'#F1C40F'],
-              [17,5,'#2980B9'],[22,3,'#E74C3C'],[25,4,'#1ABC9C']], 23);
-
-    const d5 = T*5;
-    f(d5,0,T,T,'#8B2220');
-    f(d5+3,7,T-6,T-9,'#C0392B');
-    f(d5+1,0,T-2,7,'#E74C3C');
-    f(d5,0,3,T,'#7B241C'); f(d5+T-3,0,3,T,'#7B241C');
-    f(d5+T/2-1,8,2,T-10,'#A93226');
-    f(d5+4,9,9,T-12,'#CD6155'); f(d5+T/2+2,9,9,T-12,'#CD6155');
-    f(d5+3,1,T-6,3,'#EC7063'); f(d5+3,4,T-6,1,'#B03A2E');
-    f(d5+1,T-3,2,2,'#5D1A16'); f(d5+T-3,T-3,2,2,'#5D1A16');
-
-    const d6 = T*6;
-    planks(d6);
-    f(d6+7,5,7,15,'#1A6B3C'); f(d6+18,8,7,11,'#145A32');
-    f(d6+12,2,8,17,'#1E8449');
-    f(d6+8,7,3,6,'#27AE60'); f(d6+19,10,4,5,'#1ABC9C'); f(d6+13,3,4,7,'#27AE60');
-    f(d6+10,8,1,11,'#145A32'); f(d6+22,12,1,6,'#0E6655'); f(d6+16,16,1,4,'#196F3D');
-    f(d6+15,18,2,4,'#196F3D');
-    f(d6+10,21,12,3,'#DEB887'); f(d6+11,23,10,7,'#CD853F');
-    f(d6+12,25,8,5,'#3D1A00');
-
-    const d7 = T*7;
-    planks(d7);
-    f(d7+10,2,12,22,'#2980B9');
-    f(d7+11,3,10,10,'#3498DB'); f(d7+12,4,8,8,'#85C1E9'); f(d7+13,5,6,6,'#AED6F1');
-    f(d7+12,7,8,2,'#FFFFFF');
-    f(d7+14,13,4,5,'#1A5276'); f(d7+15,14,2,3,'#85C1E9');
-    f(d7+9,18,14,2,'#AEB6BF');
-    f(d7+10,20,12,4,'#2471A3');
-    f(d7+11,21,3,2,'#E74C3C');
-    f(d7+18,21,3,2,'#3498DB');
-    f(d7+10,24,12,5,'#1F618D'); f(d7+11,25,10,3,'#1A5276');
-    f(d7+10,29,3,2,'#154360'); f(d7+19,29,3,2,'#154360');
+    drawers.forEach((draw, i) => draw(ctx, i * T));
 
     tex.refresh();
   }
+}
+
+// ── Tile drawing helpers (pure canvas, no Phaser state) ───────────────────────
+
+const f = (
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, color: string,
+) => { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); };
+
+// Rounded rectangle via arcTo (universally supported, unlike roundRect).
+const rr = (
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number, r: number, color: string,
+) => {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  ctx.fill();
+};
+
+const circle = (
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, r: number, color: string,
+) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill(); };
+
+const ellipse = (
+  ctx: CanvasRenderingContext2D,
+  cx: number, cy: number, rx: number, ry: number, color: string,
+) => { ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); };
+
+const tri = (
+  ctx: CanvasRenderingContext2D,
+  ax: number, ay: number, bx: number, by: number, cx: number, cy: number, color: string,
+) => {
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(cx, cy);
+  ctx.closePath(); ctx.fill();
+};
+
+const T = TILE;
+
+// Warm honey plank floor (also reused under plant / cooler tiles).
+function planks(ctx: CanvasRenderingContext2D, ox: number) {
+  const pc = ['#E0B070', '#D6A464', '#E6B97A', '#D8A86A'];
+  for (let p = 0; p < 4; p++) {
+    f(ctx, ox, p * 8, T, 7, pc[p]);
+    f(ctx, ox + 3 + p * 4, p * 8, 1, 7, 'rgba(255,235,180,0.20)');
+    f(ctx, ox + 18 + p * 2, p * 8, 1, 7, 'rgba(255,235,180,0.12)');
+    f(ctx, ox, p * 8 + 7, T, 1, '#9A6A34');
+  }
+}
+
+function drawFloor(ctx: CanvasRenderingContext2D, ox: number) {
+  planks(ctx, ox);
+}
+
+// Soft sage-teal plaster wall.
+function drawWall(ctx: CanvasRenderingContext2D, ox: number) {
+  f(ctx, ox, 0, T, T, '#5B8A7D');
+  f(ctx, ox, 0, T, 5, '#7BA89B');
+  f(ctx, ox, 0, 3, T, '#6B988B');
+  for (let r = 0; r < 4; r++) {
+    const y = 6 + r * 7;
+    f(ctx, ox + 3, y, T - 3, 1, '#4A6F64');
+    f(ctx, r % 2 === 0 ? ox + 18 : ox + 10, y - 6, 1, 6, '#52796D');
+  }
+  f(ctx, ox + T - 2, 0, 2, T, 'rgba(0,0,0,0.28)');
+  f(ctx, ox, T - 2, T, 2, 'rgba(0,0,0,0.28)');
+}
+
+function drawDeskPapers(ctx: CanvasRenderingContext2D, ox: number) {
+  f(ctx, ox, 0, T, T, '#9A7044'); f(ctx, ox, 0, T, 4, '#5C3A20'); f(ctx, ox, 4, T, 4, '#B08050');
+  f(ctx, ox + 3, 10, 11, 14, '#FFFFF0'); f(ctx, ox + 4, 12, 8, 1, '#C8C8B0');
+  f(ctx, ox + 4, 14, 6, 1, '#C8C8B0'); f(ctx, ox + 4, 16, 9, 1, '#C8C8B0'); f(ctx, ox + 4, 18, 7, 1, '#C8C8B0');
+  f(ctx, ox + 16, 16, 12, 9, '#4A4A4A'); f(ctx, ox + 17, 17, 10, 7, '#3A3A3A');
+  for (let kr = 0; kr < 3; kr++) f(ctx, ox + 18, 18 + kr * 2, 8, 1, '#555');
+  f(ctx, ox + 4, 23, 7, 6, '#FFFFFF'); f(ctx, ox + 5, 24, 5, 4, '#5C1414');
+  f(ctx, ox + 11, 25, 3, 3, '#FFFFFF'); f(ctx, ox + 3, 23, 1, 6, 'rgba(0,0,0,0.15)');
+  f(ctx, ox + 6, 21, 1, 2, 'rgba(200,200,200,0.5)'); f(ctx, ox + 8, 20, 1, 3, 'rgba(200,200,200,0.4)');
+}
+
+function drawDeskMonitor(ctx: CanvasRenderingContext2D, ox: number) {
+  f(ctx, ox, 0, T, T, '#9A7044'); f(ctx, ox, 0, T, 4, '#5C3A20'); f(ctx, ox, 4, T, 4, '#B08050');
+  f(ctx, ox + 5, 4, 22, 16, '#181828');
+  f(ctx, ox + 6, 5, 20, 14, '#1E2A6E');
+  const lines: [number, string][] = [[7, '#7EC8E3'], [9, '#88D498'], [11, '#F0A500'], [13, '#E86060'], [15, '#A29BFE'], [17, '#7EC8E3']];
+  lines.forEach(([ly, c], i) => f(ctx, ox + 7, ly, 5 + (i % 3) * 4, 1, c));
+  f(ctx, ox + 6, 5, 7, 4, 'rgba(255,255,255,0.07)');
+  f(ctx, ox + 14, 20, 4, 5, '#2A2A2A'); f(ctx, ox + 11, 23, 10, 2, '#333');
+  f(ctx, ox + 6, 26, 20, 5, '#4A4A4A'); f(ctx, ox + 7, 27, 18, 3, '#3A3A3A');
+  for (let kr = 0; kr < 2; kr++) f(ctx, ox + 8, 27 + kr, 16, 1, '#555');
+}
+
+function drawBookcase(ctx: CanvasRenderingContext2D, ox: number) {
+  f(ctx, ox, 0, T, T, '#3D2B1A'); f(ctx, ox, 0, T, 2, '#7A5A30');
+  f(ctx, ox, 0, 2, T, '#5C3D24'); f(ctx, ox + T - 2, 0, 2, T, '#1E140A');
+  [10, 21].forEach(sy => f(ctx, ox, sy, T, 2, '#7A5A30'));
+  const booksRow = (row: [number, number, string][], y: number) =>
+    row.forEach(([x, w, c]) => {
+      f(ctx, ox + x, y, w - 1, 8, c); f(ctx, ox + x, y, 1, 8, 'rgba(255,255,255,0.2)');
+    });
+  booksRow([[2, 3, '#C0392B'], [5, 4, '#E67E22'], [9, 3, '#27AE60'], [12, 5, '#2980B9'],
+            [17, 3, '#8E44AD'], [20, 4, '#E74C3C'], [24, 4, '#F1C40F'], [28, 2, '#16A085']], 2);
+  booksRow([[2, 4, '#9B59B6'], [6, 3, '#1ABC9C'], [9, 5, '#E74C3C'], [14, 3, '#F39C12'],
+            [17, 4, '#2ECC71'], [21, 3, '#3498DB'], [24, 5, '#E67E22'], [29, 1, '#BDC3C7']], 12);
+  booksRow([[2, 5, '#C0392B'], [7, 3, '#27AE60'], [10, 4, '#8E44AD'], [14, 3, '#F1C40F'],
+            [17, 5, '#2980B9'], [22, 3, '#E74C3C'], [25, 4, '#1ABC9C']], 23);
+}
+
+// Rounded pastel-coral couch. Sits on rug zones, so paints a rug backdrop
+// (a seamless blend there, a cute little accent rug anywhere else).
+function drawCouch(ctx: CanvasRenderingContext2D, ox: number) {
+  drawRug(ctx, ox);
+  f(ctx, ox + 2, 28, 28, 2, 'rgba(0,0,0,0.12)');           // shadow
+  rr(ctx, ox + 1, 8, 5, 20, 3, '#E07A5C');                 // left armrest
+  rr(ctx, ox + 26, 8, 5, 20, 3, '#E07A5C');                // right armrest
+  rr(ctx, ox + 3, 4, 26, 11, 4, '#E8896B');                // backrest
+  rr(ctx, ox + 3, 12, 26, 15, 5, '#F2A488');               // seat base
+  rr(ctx, ox + 5, 14, 10, 11, 3, '#F7B59C');               // cushion L
+  rr(ctx, ox + 17, 14, 10, 11, 3, '#F7B59C');              // cushion R
+  f(ctx, ox + 4, 6, 24, 2, 'rgba(255,255,255,0.18)');      // back highlight
+}
+
+function drawPlant(ctx: CanvasRenderingContext2D, ox: number) {
+  planks(ctx, ox);
+  f(ctx, ox + 7, 5, 7, 15, '#1A6B3C'); f(ctx, ox + 18, 8, 7, 11, '#145A32');
+  f(ctx, ox + 12, 2, 8, 17, '#1E8449');
+  f(ctx, ox + 8, 7, 3, 6, '#27AE60'); f(ctx, ox + 19, 10, 4, 5, '#1ABC9C'); f(ctx, ox + 13, 3, 4, 7, '#27AE60');
+  f(ctx, ox + 10, 8, 1, 11, '#145A32'); f(ctx, ox + 22, 12, 1, 6, '#0E6655'); f(ctx, ox + 16, 16, 1, 4, '#196F3D');
+  f(ctx, ox + 15, 18, 2, 4, '#196F3D');
+  f(ctx, ox + 10, 21, 12, 3, '#DEB887'); f(ctx, ox + 11, 23, 10, 7, '#CD853F');
+  f(ctx, ox + 12, 25, 8, 5, '#3D1A00');
+}
+
+function drawCooler(ctx: CanvasRenderingContext2D, ox: number) {
+  planks(ctx, ox);
+  f(ctx, ox + 10, 2, 12, 22, '#2980B9');
+  f(ctx, ox + 11, 3, 10, 10, '#3498DB'); f(ctx, ox + 12, 4, 8, 8, '#85C1E9'); f(ctx, ox + 13, 5, 6, 6, '#AED6F1');
+  f(ctx, ox + 12, 7, 8, 2, '#FFFFFF');
+  f(ctx, ox + 14, 13, 4, 5, '#1A5276'); f(ctx, ox + 15, 14, 2, 3, '#85C1E9');
+  f(ctx, ox + 9, 18, 14, 2, '#AEB6BF');
+  f(ctx, ox + 10, 20, 12, 4, '#2471A3');
+  f(ctx, ox + 11, 21, 3, 2, '#E74C3C');
+  f(ctx, ox + 18, 21, 3, 2, '#3498DB');
+  f(ctx, ox + 10, 24, 12, 5, '#1F618D'); f(ctx, ox + 11, 25, 10, 3, '#1A5276');
+  f(ctx, ox + 10, 29, 3, 2, '#154360'); f(ctx, ox + 19, 29, 3, 2, '#154360');
+}
+
+// Seamless woven rug — pattern repeats every tile so adjacent rug tiles blend.
+function drawRug(ctx: CanvasRenderingContext2D, ox: number) {
+  f(ctx, ox, 0, T, T, '#E3C9A0');
+  for (let yy = 0; yy < T; yy += 8) {
+    for (let xx = 0; xx < T; xx += 8) {
+      f(ctx, ox + xx + 1, yy + 1, 3, 3, '#EFD9B8');
+      f(ctx, ox + xx + 5, yy + 5, 2, 2, '#CDAE82');
+    }
+  }
+}
+
+// Pale flagstone walkway — distinct from honey floor, offset-brick pattern.
+function drawWalkway(ctx: CanvasRenderingContext2D, ox: number) {
+  f(ctx, ox, 0, T, T, '#CDBC97');
+  const seam = '#B0996F';
+  f(ctx, ox, 0, T, 2, seam); f(ctx, ox, 15, T, 2, seam);
+  f(ctx, ox, 0, 2, 15, seam); f(ctx, ox + 16, 0, 2, 15, seam);
+  f(ctx, ox + 8, 15, 2, 17, seam); f(ctx, ox + 24, 15, 2, 17, seam);
+  f(ctx, ox + 3, 3, 11, 10, '#D8C8A6'); f(ctx, ox + 19, 3, 10, 10, '#D8C8A6');
+  f(ctx, ox + 11, 18, 11, 11, '#D8C8A6'); f(ctx, ox + 27, 18, 4, 11, '#D8C8A6');
+  f(ctx, ox + 1, 18, 6, 11, '#D8C8A6');
+}
+
+function drawRoundTable(ctx: CanvasRenderingContext2D, ox: number) {
+  drawRug(ctx, ox);                                        // backdrop (blends on rugs)
+  ellipse(ctx, ox + 16, 27, 12, 4, 'rgba(0,0,0,0.12)');    // shadow
+  circle(ctx, ox + 16, 15, 13, '#A9743F');                 // table edge
+  circle(ctx, ox + 16, 14, 11, '#C28E54');                 // top highlight
+  circle(ctx, ox + 16, 15, 8, '#B5824A');                  // inner
+  f(ctx, ox + 13, 11, 6, 2, '#36A268');                    // tiny plant
+  f(ctx, ox + 14, 9, 4, 4, '#2E8B57');
+}
+
+function drawCoffee(ctx: CanvasRenderingContext2D, ox: number) {
+  planks(ctx, ox);
+  rr(ctx, ox + 2, 16, 28, 14, 3, '#8C6A47');               // counter
+  f(ctx, ox + 2, 16, 28, 3, '#A6815B');                    // counter top
+  rr(ctx, ox + 6, 4, 20, 14, 2, '#3A3A40');                // machine body
+  f(ctx, ox + 7, 6, 18, 6, '#5A5A66');                     // upper panel
+  f(ctx, ox + 9, 7, 6, 3, '#9AD7E0');                      // display
+  f(ctx, ox + 14, 18, 4, 3, '#222');                       // group head
+  f(ctx, ox + 8, 12, 4, 4, '#FFFFFF'); f(ctx, ox + 20, 12, 4, 4, '#FFFFFF'); // cups
+  f(ctx, ox + 10, 2, 1, 2, 'rgba(255,255,255,0.5)'); f(ctx, ox + 22, 2, 1, 2, 'rgba(255,255,255,0.5)'); // steam
+}
+
+function drawWhiteboard(ctx: CanvasRenderingContext2D, ox: number) {
+  planks(ctx, ox);
+  f(ctx, ox + 2, 3, 28, 22, '#6B4F34');                    // frame
+  f(ctx, ox + 4, 5, 24, 18, '#F7F7F2');                    // board
+  f(ctx, ox + 6, 8, 10, 1, '#E74C3C'); f(ctx, ox + 6, 11, 14, 1, '#2980B9'); f(ctx, ox + 6, 14, 8, 1, '#27AE60');
+  f(ctx, ox + 18, 8, 6, 1, '#8E44AD'); f(ctx, ox + 18, 11, 5, 1, '#F39C12');
+  f(ctx, ox + 18, 15, 6, 5, '#3498DB'); f(ctx, ox + 19, 16, 4, 3, '#85C1E9');
+  f(ctx, ox + 4, 23, 24, 2, '#5C4326'); f(ctx, ox + 8, 24, 5, 1, '#E74C3C'); // tray + marker
+}
+
+function drawWindow(ctx: CanvasRenderingContext2D, ox: number) {
+  f(ctx, ox, 0, T, T, '#5B8A7D');                          // wall plaster
+  f(ctx, ox, 0, T, 5, '#7BA89B'); f(ctx, ox, 0, 3, T, '#6B988B');
+  f(ctx, ox + 5, 5, 22, 22, '#EAE0CC');                    // frame
+  f(ctx, ox + 7, 7, 18, 18, '#86C5E0');                    // sky
+  f(ctx, ox + 15, 7, 2, 18, '#EAE0CC'); f(ctx, ox + 7, 15, 18, 2, '#EAE0CC'); // mullions
+  f(ctx, ox + 9, 9, 5, 2, 'rgba(255,255,255,0.8)'); f(ctx, ox + 19, 18, 4, 2, 'rgba(255,255,255,0.6)'); // clouds
+  f(ctx, ox + 4, 25, 24, 3, '#C9BF9F');                    // sill
+}
+
+function drawChest(ctx: CanvasRenderingContext2D, ox: number) {
+  planks(ctx, ox);
+  f(ctx, ox + 5, 29, 22, 2, 'rgba(0,0,0,0.18)');           // shadow
+  rr(ctx, ox + 5, 15, 22, 13, 2, '#6E4A28');               // body
+  f(ctx, ox + 5, 18, 22, 2, '#8A6038');                    // plank line
+  // domed lid
+  ctx.fillStyle = '#7A5230';
+  ctx.beginPath();
+  ctx.moveTo(ox + 5, 16);
+  ctx.arcTo(ox + 5, 8, ox + 16, 8, 7);
+  ctx.arcTo(ox + 27, 8, ox + 27, 16, 7);
+  ctx.lineTo(ox + 27, 16);
+  ctx.closePath();
+  ctx.fill();
+  f(ctx, ox + 5, 14, 22, 2, '#C8A24A');                    // lock band
+  f(ctx, ox + 9, 8, 2, 20, '#C8A24A'); f(ctx, ox + 21, 8, 2, 20, '#C8A24A'); // metal straps
+  f(ctx, ox + 12, 11, 8, 2, '#FFE08A');                    // gold glimmer
+  f(ctx, ox + 14, 15, 4, 5, '#E0C158'); f(ctx, ox + 15, 17, 2, 2, '#6E4A28'); // lock
+}
+
+function drawShip(ctx: CanvasRenderingContext2D, ox: number) {
+  planks(ctx, ox);
+  rr(ctx, ox + 4, 22, 24, 7, 2, '#8C6A47'); f(ctx, ox + 4, 22, 24, 2, '#A6815B'); // side table
+  rr(ctx, ox + 4, 9, 24, 12, 6, 'rgba(160,205,190,0.55)'); // bottle glass
+  f(ctx, ox + 2, 12, 4, 6, '#B5824A');                     // cork
+  f(ctx, ox + 11, 16, 9, 3, '#6E4A28');                    // hull
+  f(ctx, ox + 15, 8, 1, 8, '#5C3D24');                     // mast
+  tri(ctx, ox + 15, 9, ox + 15, 15, ox + 11, 15, '#F7F2E5');
+  tri(ctx, ox + 16, 9, ox + 16, 15, ox + 20, 15, '#F7F2E5');
+  f(ctx, ox + 8, 11, 10, 1, 'rgba(255,255,255,0.4)');      // glass highlight
+}
+
+function drawTiki(ctx: CanvasRenderingContext2D, ox: number) {
+  planks(ctx, ox);
+  rr(ctx, ox + 10, 22, 12, 8, 2, '#B5651D'); f(ctx, ox + 10, 22, 12, 2, '#CD7D33'); // pot
+  f(ctx, ox + 15, 12, 3, 11, '#7A5230');                   // trunk
+  tri(ctx, ox + 16, 12, ox + 4, 8, ox + 6, 13, '#27AE60');
+  tri(ctx, ox + 16, 12, ox + 28, 8, ox + 26, 13, '#27AE60');
+  tri(ctx, ox + 16, 11, ox + 8, 2, ox + 13, 5, '#2ECC71');
+  tri(ctx, ox + 16, 11, ox + 24, 2, ox + 19, 5, '#2ECC71');
+  tri(ctx, ox + 16, 11, ox + 14, 1, ox + 18, 4, '#3FE07A');
+  f(ctx, ox + 12, 11, 3, 3, '#6E4A28'); f(ctx, ox + 17, 11, 3, 3, '#6E4A28'); // coconuts
+}
+
+function drawParrot(ctx: CanvasRenderingContext2D, ox: number) {
+  planks(ctx, ox);
+  f(ctx, ox + 15, 10, 2, 18, '#8C6A47');                   // pole
+  rr(ctx, ox + 10, 26, 12, 3, 2, '#6E4A28');               // base
+  f(ctx, ox + 9, 12, 14, 2, '#A6815B');                    // perch bar
+  ellipse(ctx, ox + 13, 9, 5, 6, '#E74C3C');               // body
+  ellipse(ctx, ox + 14, 9, 3, 5, '#2980B9');               // wing
+  circle(ctx, ox + 12, 5, 3, '#E74C3C');                   // head
+  tri(ctx, ox + 9, 5, ox + 12, 4, ox + 12, 7, '#F1C40F');  // beak
+  f(ctx, ox + 12, 3, 1, 1, '#000');                        // eye
+  tri(ctx, ox + 14, 13, ox + 18, 21, ox + 15, 14, '#27AE60'); // tail
+}
+
+function drawSign(ctx: CanvasRenderingContext2D, ox: number) {
+  planks(ctx, ox);
+  f(ctx, ox + 4, 2, 2, 26, '#6E4A28');                     // post
+  f(ctx, ox + 4, 4, 16, 2, '#6E4A28');                     // cross arm
+  f(ctx, ox + 9, 6, 1, 3, '#888'); f(ctx, ox + 17, 6, 1, 3, '#888'); // chains
+  rr(ctx, ox + 7, 9, 18, 14, 2, '#A9743F');                // board
+  f(ctx, ox + 7, 9, 18, 2, '#C28E54');                     // top highlight
+  f(ctx, ox + 10, 13, 12, 1, '#3D2B1A'); f(ctx, ox + 10, 16, 9, 1, '#3D2B1A'); f(ctx, ox + 10, 19, 11, 1, '#3D2B1A'); // text
+  tri(ctx, ox + 22, 16, ox + 25, 18, ox + 22, 20, '#C0392B'); // arrow
 }

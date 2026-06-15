@@ -101,6 +101,10 @@ export class OfficeScene extends Phaser.Scene {
 
   private lkRoom: Room | null = null;
   private localMeta: AvatarMeta = { ...DEFAULT_META };
+  // Texture key for the local player. Each live redesign bumps to a fresh key
+  // (like remote avatars) so we never mutate a texture/animation in use.
+  private localTexKey = 'player_local';
+  private localTexVersion = 0;
   private remoteAvatars = new Map<string, RemoteAvatar>();
 
   private lastPosSend = 0;
@@ -118,17 +122,45 @@ export class OfficeScene extends Phaser.Scene {
     if (data.meta) this.localMeta = { ...DEFAULT_META, ...data.meta };
   }
 
+  /**
+   * Re-design the local player's character live. Builds a *fresh* texture +
+   * walk animations under a new key and points the sprite at them, then frees
+   * the previous set — this avoids ever removing a texture/animation that the
+   * sprite is currently using (which nulls frames mid-render). Broadcasting the
+   * new look to peers is the caller's job (LiveKit metadata update), which peers
+   * pick up via ParticipantMetadataChanged.
+   */
+  applyLocalMeta(meta: AvatarMeta) {
+    this.localMeta = { ...DEFAULT_META, ...meta };
+
+    const prevKey = this.localTexKey;
+    const nextKey = `player_local_${++this.localTexVersion}`;
+    this.buildAvatarTexture(nextKey, this.localMeta);
+    this.createAvatarAnimations(nextKey);
+
+    this.player.anims.stop();
+    this.player.setTexture(nextKey, IDLE_FRAME[this.facing]);
+    this.localTexKey = nextKey;
+
+    // The sprite no longer references the old set, so it's safe to free.
+    (['down', 'up', 'left', 'right'] as Direction[]).forEach((dir) => {
+      const animKey = `walk-${dir}-${prevKey}`;
+      if (this.anims.exists(animKey)) this.anims.remove(animKey);
+    });
+    if (this.textures.exists(prevKey)) this.textures.remove(prevKey);
+  }
+
   create() {
     this.buildTilesetTexture();
-    this.buildAvatarTexture('player_local', this.localMeta);
-    this.createAvatarAnimations('player_local');
+    this.buildAvatarTexture(this.localTexKey, this.localMeta);
+    this.createAvatarAnimations(this.localTexKey);
 
     const map = this.make.tilemap({ data: OFFICE_MAP, tileWidth: TILE, tileHeight: TILE });
     const tileset = map.addTilesetImage('office-tiles', 'tiles', TILE, TILE, 0, 0, 1)!;
     const layer = map.createLayer(0, tileset, 0, 0)!;
     layer.setCollisionByExclusion([-1, ...WALKABLE_GIDS]);
 
-    this.player = this.physics.add.sprite(SPAWN_X, SPAWN_Y, 'player_local', 0);
+    this.player = this.physics.add.sprite(SPAWN_X, SPAWN_Y, this.localTexKey, 0);
     this.player.setDepth(1);
     this.physics.add.collider(this.player, layer);
 
@@ -218,7 +250,7 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     if (moving) {
-      this.player.anims.play(`walk-${this.facing}-player_local`, true);
+      this.player.anims.play(`walk-${this.facing}-${this.localTexKey}`, true);
     } else {
       this.player.anims.stop();
       this.player.setFrame(IDLE_FRAME[this.facing]);

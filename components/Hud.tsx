@@ -6,12 +6,13 @@ export type ConnectionStatus = 'connected' | 'reconnecting' | 'disconnected';
 type Props = {
   muted: boolean;
   onToggle: () => void;
+  onRedesign: () => void;
   localName: string;
   participants: ParticipantInfo[];
   connectionStatus: ConnectionStatus;
 };
 
-export default function Hud({ muted, onToggle, localName, participants, connectionStatus }: Props) {
+export default function Hud({ muted, onToggle, onRedesign, localName, participants, connectionStatus }: Props) {
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
 
@@ -52,8 +53,8 @@ export default function Hud({ muted, onToggle, localName, participants, connecti
         </div>
       )}
 
-      {/* Mute button — bottom centre */}
-      <div className="absolute bottom-5 left-1/2 -translate-x-1/2">
+      {/* Action buttons — bottom centre */}
+      <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2">
         <button
           onClick={onToggle}
           className={`pointer-events-auto rounded-full px-5 py-2 text-sm font-semibold shadow-lg transition-colors ${
@@ -63,6 +64,13 @@ export default function Hud({ muted, onToggle, localName, participants, connecti
           }`}
         >
           {muted ? 'Unmute mic' : 'Mute mic'}
+        </button>
+        <button
+          onClick={onRedesign}
+          title="Re-design your character"
+          className="pointer-events-auto rounded-full bg-zinc-700/90 px-5 py-2 text-sm font-semibold text-white shadow-lg transition-colors hover:bg-zinc-600"
+        >
+          🎨 Customise
         </button>
       </div>
 

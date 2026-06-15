@@ -5,12 +5,18 @@ import type { Room } from 'livekit-client';
 import Hud from '@/components/Hud';
 import type { ParticipantInfo, ConnectionStatus } from '@/components/Hud';
 import ChatPanel from '@/components/ChatPanel';
+import AvatarEditor from '@/components/AvatarEditor';
+import { saveAvatarMeta } from '@/lib/avatarMeta';
 import { encodeMsg, decodeMsg } from '@/lib/realtime';
 import type { AvatarMeta, ChatMsg } from '@/lib/realtime';
+import type { OfficeScene } from '@/game/scenes/OfficeScene';
 
-export default function GameCanvas({ room: roomSlug, meta }: { room: string; meta: AvatarMeta }) {
+export default function GameCanvas({ room: roomSlug, meta: initialMeta }: { room: string; meta: AvatarMeta }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const lkRoomRef = useRef<Room | null>(null);
+  const gameRef = useRef<PhaserType.Game | null>(null);
+  const [meta, setMeta] = useState<AvatarMeta>(initialMeta);
+  const [redesignOpen, setRedesignOpen] = useState(false);
   const [muted, setMuted] = useState(false);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [chatOpen, setChatOpen] = useState(false);
@@ -168,6 +174,7 @@ export default function GameCanvas({ room: roomSlug, meta }: { room: string; met
         },
         scene: [],
       });
+      gameRef.current = game;
 
       game.events.once('ready', () => {
         if (!mounted) return;
@@ -221,8 +228,25 @@ export default function GameCanvas({ room: roomSlug, meta }: { room: string; met
       lkRoomRef.current?.disconnect();
       lkRoomRef.current = null;
       game?.destroy(true);
+      gameRef.current = null;
     };
   }, [roomSlug]);
+
+  // Re-design the character live: persist, rebuild the local Phaser sprite, and
+  // broadcast the new look to peers via LiveKit metadata (they rebuild on
+  // ParticipantMetadataChanged). Keeps the same identity — no reconnect.
+  const handleRedesign = (next: AvatarMeta) => {
+    saveAvatarMeta(next);
+    setMeta(next);
+    setRedesignOpen(false);
+
+    const scene = gameRef.current?.scene.getScene('OfficeScene') as OfficeScene | undefined;
+    scene?.applyLocalMeta(next);
+
+    lkRoomRef.current?.localParticipant
+      .setMetadata(JSON.stringify(next))
+      .catch((e) => console.warn('Failed to broadcast new avatar:', e));
+  };
 
   const openChat = () => {
     chatOpenRef.current = true;
@@ -287,10 +311,24 @@ export default function GameCanvas({ room: roomSlug, meta }: { room: string; met
       <Hud
         muted={muted}
         onToggle={handleToggleMute}
+        onRedesign={() => setRedesignOpen(true)}
         localName={meta.name}
         participants={participants}
         connectionStatus={connectionStatus}
       />
+      {redesignOpen && (
+        <div className="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center overflow-y-auto bg-black/70 py-8">
+          <div className="flex flex-col items-center gap-4 rounded-2xl bg-zinc-950 px-8 py-6 text-zinc-100 shadow-2xl">
+            <h2 className="text-xl font-bold tracking-tight">Re-design your character</h2>
+            <AvatarEditor
+              initial={meta}
+              submitLabel="Save look"
+              onSubmit={handleRedesign}
+              onCancel={() => setRedesignOpen(false)}
+            />
+          </div>
+        </div>
+      )}
       <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-end p-5">
         <ChatPanel
           messages={messages}

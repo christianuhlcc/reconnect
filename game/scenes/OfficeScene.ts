@@ -153,6 +153,12 @@ export class OfficeScene extends Phaser.Scene {
     this.input.keyboard!.disableGlobalCapture();
 
     this.setupLiveKitListeners();
+
+    // Announce our spawn position to peers already in the room so we show up
+    // before our first move. The delayed retry covers the brief window where
+    // the data channel isn't ready immediately after connect.
+    this.broadcastPos(false, true);
+    this.time.delayedCall(800, () => this.broadcastPos(false, true));
   }
 
   update() {
@@ -263,7 +269,9 @@ export class OfficeScene extends Phaser.Scene {
     });
   }
 
-  private broadcastPos(moving: boolean) {
+  // Movement updates go out lossy on a fast cadence; presence announcements
+  // (join / first-contact) go out reliable so a still avatar is never invisible.
+  private broadcastPos(moving: boolean, reliable = false) {
     if (!this.lkRoom || this.lkRoom.state !== ConnectionState.Connected) return;
     const msg: PosMsg = {
       t: 'pos',
@@ -273,7 +281,7 @@ export class OfficeScene extends Phaser.Scene {
       moving,
     };
     this.lkRoom.localParticipant.publishData(encodeMsg(msg), {
-      reliable: false,
+      reliable,
       topic: 'pos',
     }).catch(() => {});
   }
@@ -306,6 +314,9 @@ export class OfficeScene extends Phaser.Scene {
       }
       avatar = new RemoteAvatar(this, msg.x, msg.y, name, texKey);
       this.remoteAvatars.set(identity, avatar);
+      // First time we've seen this peer: reply with our own position so they
+      // render us too, even if neither of us is moving.
+      this.broadcastPos(false, true);
     }
     avatar.applyPos(msg);
 
@@ -331,6 +342,11 @@ export class OfficeScene extends Phaser.Scene {
         } catch { /* ignore malformed packets */ }
       }
     );
+
+    this.lkRoom.on(RoomEvent.ParticipantConnected, () => {
+      // Someone just joined — announce where we are so they see us immediately.
+      this.broadcastPos(false, true);
+    });
 
     this.lkRoom.on(RoomEvent.ParticipantDisconnected, (participant: { identity: string }) => {
       this.remoteAvatars.get(participant.identity)?.destroy();

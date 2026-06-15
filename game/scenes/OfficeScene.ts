@@ -375,61 +375,62 @@ export class OfficeScene extends Phaser.Scene {
     const tex = this.textures.createCanvas(key, W * 8, H)!;
     const ctx = tex.getContext()!;
 
+    // Chibi proportions: oversized head, small rounded body, stubby limbs —
+    // the silhouette that reads as "cute video-game character".
+    const HEAD_R = 12;
+    const outline = 'rgba(38,26,40,0.5)';
+    const skinShade = shade(skinTone, -0.12);
+    const shirtLight = shade(shirtColor, 0.16);
     const dirs: Direction[] = ['down', 'up', 'left', 'right'];
 
     dirs.forEach((dir, di) => {
       for (let frame = 0; frame < 2; frame++) {
         const bx = (di * 2 + frame) * W;
         const cx = bx + W / 2;
-        const cy = H - 42; // head center y = 6
+        const headCy = 15;
+        const bob = frame === 1 ? 1 : 0; // tiny vertical bob on the 2nd walk frame
 
-        // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.18)';
-        ctx.beginPath();
-        ctx.ellipse(cx, H - 2, 11, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
+        // ── Ground shadow ──
+        ellipse(ctx, cx, H - 3, 10, 3, 'rgba(0,0,0,0.18)');
 
-        // Legs (alternating walk frames)
-        const legA = frame === 0 ? 3 : 0;
-        const legB = frame === 0 ? 0 : 3;
-        ctx.fillStyle = '#2255CC';
-        ctx.fillRect(bx + 8,  H - 15 + legA, 6, 13);
-        ctx.fillStyle = '#1a44aa';
-        ctx.fillRect(bx + 18, H - 15 + legB, 6, 13);
+        // ── Feet: little rounded shoes that alternate while walking ──
+        const footY = H - 8;
+        const stepL = frame === 0 ? -1 : 0;
+        const stepR = frame === 0 ? 0 : -1;
+        rr(ctx, bx + 8,  footY + stepL, 7, 6, 3, outline);
+        rr(ctx, bx + 17, footY + stepR, 7, 6, 3, outline);
+        rr(ctx, bx + 9,  footY + stepL, 6, 5, 2, '#5A3A22');
+        rr(ctx, bx + 18, footY + stepR, 6, 5, 2, '#5A3A22');
+        f(ctx, bx + 10, footY + stepL + 1, 3, 1, 'rgba(255,255,255,0.3)');
+        f(ctx, bx + 19, footY + stepR + 1, 3, 1, 'rgba(255,255,255,0.3)');
 
-        // Body / shirt
-        ctx.fillStyle = shirtColor;
-        ctx.fillRect(bx + 6, H - 35, 20, 22);
-        ctx.fillStyle = shirtDark;
-        ctx.fillRect(bx + 6, H - 35, 4, 22); // left-arm shadow
+        // ── Body / shirt: rounded with a soft outline ──
+        const bodyTop = 24 + bob;
+        rr(ctx, bx + 6, bodyTop,     20, 17, 8, outline);
+        rr(ctx, bx + 7, bodyTop + 1, 18, 15, 7, shirtColor);
+        f(ctx, bx + 9,  bodyTop + 2,  14, 2, shirtLight);  // chest highlight
+        f(ctx, bx + 8,  bodyTop + 12, 16, 3, shirtDark);   // belly shade
+        f(ctx, cx - 3,  bodyTop + 1,  6, 2,  shirtDark);   // collar
 
-        // Head (skin tone)
-        ctx.fillStyle = skinTone;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 10, 0, Math.PI * 2);
-        ctx.fill();
+        // ── Stubby mitten hands ──
+        const handY = bodyTop + 7 + bob;
+        circle(ctx, bx + 6,  handY, 3,   outline);
+        circle(ctx, bx + 26, handY, 3,   outline);
+        circle(ctx, bx + 6,  handY, 2.2, skinTone);
+        circle(ctx, bx + 26, handY, 2.2, skinTone);
 
-        // Hair
-        this.drawHair(ctx, cx, cy, hairStyle, hairColor);
+        // ── Head ──
+        circle(ctx, cx, headCy, HEAD_R + 0.5, outline);
+        circle(ctx, cx, headCy, HEAD_R, skinTone);
+        ellipse(ctx, cx, headCy + HEAD_R - 4, HEAD_R - 4, 3, skinShade); // soft jaw
 
-        // Eyes / face details
-        ctx.fillStyle = '#333333';
-        if (dir === 'down') {
-          ctx.fillRect(bx + 9,  H - 41, 3, 3);
-          ctx.fillRect(bx + 20, H - 41, 3, 3);
-        } else if (dir === 'up') {
-          // Back of head — no eyes visible
-        } else if (dir === 'left') {
-          ctx.fillRect(bx + 7, H - 44, 3, 3);
-          ctx.fillRect(bx + 7, H - 39, 3, 3);
-        } else {
-          ctx.fillRect(bx + 22, H - 44, 3, 3);
-          ctx.fillRect(bx + 22, H - 39, 3, 3);
-        }
+        // ── Hair: back of head when facing away, otherwise front fringe ──
+        this.drawHair(ctx, cx, headCy, HEAD_R, hairStyle, hairColor, dir === 'up');
 
-        // Beard (not shown from behind)
-        if (dir !== 'up' && beard !== 'none') {
-          this.drawBeard(ctx, cx, cy, beard, hairColor);
+        // ── Beard, then face (both hidden from behind) ──
+        if (dir !== 'up') {
+          if (beard !== 'none') this.drawBeard(ctx, cx, headCy, HEAD_R, beard, hairColor);
+          this.drawFace(ctx, cx, headCy, dir);
         }
       }
     });
@@ -444,84 +445,146 @@ export class OfficeScene extends Phaser.Scene {
 
   private drawHair(
     ctx: CanvasRenderingContext2D,
-    cx: number, cy: number,
-    style: string, color: string
+    cx: number, cy: number, r: number,
+    style: string, color: string, back: boolean,
   ) {
     if (style === 'bald') return;
-    ctx.fillStyle = color;
+    const dark = shade(color, -0.15);
+
+    // Most fringe shapes are clipped to the head circle so they stay head-shaped.
+    const clipHead = () => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 0.5, 0, Math.PI * 2);
+      ctx.clip();
+    };
+
+    // A spiky three-point fan rising off the crown.
+    const mohawkCrest = () => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(cx - 6, cy - r + 4);
+      ctx.lineTo(cx - 4, cy - r - 4);
+      ctx.lineTo(cx - 1.5, cy - r + 1);
+      ctx.lineTo(cx, cy - r - 8);
+      ctx.lineTo(cx + 1.5, cy - r + 1);
+      ctx.lineTo(cx + 4, cy - r - 4);
+      ctx.lineTo(cx + 6, cy - r + 4);
+      ctx.closePath();
+      ctx.fill();
+    };
+
+    if (back) {
+      // Facing away: the back of the head is mostly hair.
+      clipHead();
+      if (style === 'mohawk') {
+        f(ctx, cx - 3, cy - r, 6, r * 2, color);
+      } else {
+        circle(ctx, cx, cy, r, color);
+      }
+      ctx.restore();
+      if (style === 'bun') {
+        circle(ctx, cx, cy - r - 1, 4, color);
+        f(ctx, cx - 5, cy - r + 2, 10, 2, dark);
+      } else if (style === 'mohawk') {
+        mohawkCrest();
+      }
+      return;
+    }
 
     switch (style) {
       case 'short':
-        // Tight cap over the top half of the head
-        ctx.beginPath();
-        ctx.arc(cx, cy, 10, Math.PI, 2 * Math.PI);
-        ctx.fill();
-        ctx.fillRect(cx - 10, 0, 20, cy);
+        clipHead();
+        f(ctx, cx - r, cy - r, r * 2, r, color); // cap over the forehead
+        ctx.restore();
         break;
 
       case 'long':
-        // Cap + flowing side strands
-        ctx.beginPath();
-        ctx.arc(cx, cy, 10, Math.PI, 2 * Math.PI);
-        ctx.fill();
-        ctx.fillRect(cx - 10, 0, 20, cy);
-        ctx.fillRect(cx - 13, cy - 2, 5, 20);
-        ctx.fillRect(cx + 8,  cy - 2, 5, 20);
+        clipHead();
+        f(ctx, cx - r, cy - r, r * 2, r, color);
+        ctx.restore();
+        rr(ctx, cx - r,     cy - 2, 3, r + 7, 2, color); // flowing side strands
+        rr(ctx, cx + r - 3, cy - 2, 3, r + 7, 2, color);
         break;
 
-      case 'curly':
-        // Wide fluffy top — three overlapping circles
-        [cx - 7, cx, cx + 7].forEach((px) => {
-          ctx.beginPath();
-          ctx.arc(px, cy - 7, 8, 0, Math.PI * 2);
-          ctx.fill();
-        });
-        ctx.fillRect(cx - 11, cy - 7, 22, cy + 7);
+      case 'curly': {
+        // Fluffy bumps around the crown, spilling slightly past the head.
+        const bumps: [number, number][] = [
+          [-9, -5], [-4, -9], [2, -9], [8, -6], [-7, -10], [0, -11], [6, -10],
+        ];
+        bumps.forEach(([dx, dy]) => circle(ctx, cx + dx, cy + dy, 5, color));
+        clipHead();
+        f(ctx, cx - r, cy - r, r * 2, r - 2, color);
+        ctx.restore();
         break;
+      }
 
       case 'bun':
-        // Small bun on the very top + a banding strip
-        ctx.beginPath();
-        ctx.arc(cx, cy - 13, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillRect(cx - 8, cy - 10, 16, 3);
-        // Thin base
-        ctx.beginPath();
-        ctx.arc(cx, cy, 4, Math.PI, 2 * Math.PI);
-        ctx.fill();
-        ctx.fillRect(cx - 4, 0, 8, cy);
+        clipHead();
+        f(ctx, cx - r, cy - r, r * 2, r, color);
+        ctx.restore();
+        circle(ctx, cx, cy - r - 1, 4, color);   // top knot
+        f(ctx, cx - 5, cy - r + 2, 10, 2, dark); // hair tie
         break;
 
       case 'mohawk':
-        // Narrow central strip rising above the head
-        ctx.fillRect(cx - 2, 0, 5, cy + 3);
-        ctx.fillRect(cx - 4, cy - 3, 9, 5);
+        clipHead();
+        f(ctx, cx - 3, cy - r, 6, r, color);       // strip across the crown
+        ctx.restore();
+        mohawkCrest();                             // raised spiky fin
         break;
     }
   }
 
+  private drawFace(
+    ctx: CanvasRenderingContext2D,
+    cx: number, cy: number, dir: Direction,
+  ) {
+    const eyeY = cy + 2;
+    const ox = dir === 'left' ? -2 : dir === 'right' ? 2 : 0;
+    const dx = 4;
+
+    // Big shiny eyes — the single biggest "cute" cue.
+    ellipse(ctx, cx - dx + ox, eyeY, 2.3, 3.1, '#2A2230');
+    ellipse(ctx, cx + dx + ox, eyeY, 2.3, 3.1, '#2A2230');
+    circle(ctx, cx - dx + ox - 0.7, eyeY - 1.3, 1, '#FFFFFF'); // catch-light
+    circle(ctx, cx + dx + ox - 0.7, eyeY - 1.3, 1, '#FFFFFF');
+
+    // Rosy blush cheeks.
+    ellipse(ctx, cx - 7 + ox, eyeY + 3, 2, 1.4, 'rgba(255,150,150,0.45)');
+    ellipse(ctx, cx + 7 + ox, eyeY + 3, 2, 1.4, 'rgba(255,150,150,0.45)');
+
+    // Little smile.
+    ctx.strokeStyle = '#9A5A3A';
+    ctx.lineWidth = 1;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(cx + ox, eyeY + 2.5, 2, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.stroke();
+  }
+
   private drawBeard(
     ctx: CanvasRenderingContext2D,
-    cx: number, cy: number,
-    beard: string, hairColor: string
+    cx: number, cy: number, r: number,
+    beard: string, hairColor: string,
   ) {
-    // Clip drawing to the lower half of the head circle
+    // Clip to the head circle so the beard hugs the lower face.
     ctx.save();
     ctx.beginPath();
-    ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.clip();
 
     if (beard === 'stubble') {
       ctx.fillStyle = shade(hairColor, -0.1);
-      for (let py = cy + 1; py <= cy + 9; py += 2) {
-        for (let px = cx - 8; px <= cx + 8; px += 3) {
+      for (let py = cy + 2; py <= cy + r; py += 2) {
+        for (let px = cx - r; px <= cx + r; px += 3) {
           ctx.fillRect(px, py, 1, 1);
         }
       }
     } else {
       // full
       ctx.fillStyle = hairColor;
-      ctx.fillRect(cx - 9, cy + 1, 18, 9);
+      ctx.fillRect(cx - r, cy + 2, r * 2, r - 2);
     }
 
     ctx.restore();
